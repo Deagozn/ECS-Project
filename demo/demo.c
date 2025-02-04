@@ -62,14 +62,17 @@ unsigned char invalid_account_no_1[] = {"Invalid Account"};
 unsigned char invalid_account_no_2[] = {"Number"};
 unsigned char invalid_pin_no[] = {"Invalid Pin"};
 unsigned char try_again[] = {"1. Try Again"};
-unsigned char quit[] = {"2. Quit"};
+unsigned char quit[] = {"2. Cancel"};
+unsigned char total_cost[] = {"Total: $"};
 unsigned char amount_charged_1[] = {"Amount charged:"};
 unsigned char amount_charged_2[] = {"$"}; //Follow with number
 unsigned char balance_1[] = {"Balance:"};
 unsigned char balance_2[] = {"$"}; //Follow with number
+unsigned char insufficient_funds[] = {"Not enough funds"};
 unsigned char dispensing[] = {"Dispensing..."};
 unsigned char loading[] = {"loading..."};
 unsigned char thank_you[] = {"Thank You"};
+unsigned char cancel[] = {"Cancelling..."};
 
 // Item qunatity (0-9)
 unsigned int item1_quantity = 9;
@@ -81,6 +84,17 @@ unsigned double item1_price = 1.50;
 unsigned double item2_price = 2.00;
 unsigned double item3_price = 2.50;
 unsigned double item4_price = 3.00;
+
+unsigned int item_quantity_selected = 0;
+unsigned double total_cost = 0.0;
+
+unsigned char account_number = {"1234"};
+unsigned char pin_number = {"4321"};
+
+unsigned char input_acc_num = {};
+unsigned char input_pin_num = {};
+
+unsigned double account_balance = 10.0;
 
 
 // Declaration of thread condition variable 
@@ -187,57 +201,375 @@ void* thread_keypad(void* value)
 	pthread_mutex_lock(&motorlock);
 	pthread_mutex_lock(&daclock);
 
-	while(1)
-	{
-		pthread_mutex_lock(&bus_lock);
-		LCDprint(select_item);
-		pthread_mutex_unlock(&bus_lock);
-
-		pthread_mutex_lock(&bus_lock);
-		i = ScanKey();
-		pthread_mutex_unlock(&bus_lock);
-		usleep(100000);
-
-		if (i == '1' )
+	start:
+		while(1)
 		{
-			printf("Pressed Key: %c\n",i);
-			initlcd();
-			int mj = 0;
-				
 			pthread_mutex_lock(&bus_lock);
-			LCDprint(strcat(item_quantity_remain, item1_quantity));
-			lcd_writecmd(0xC0);
-			LCDprint(item_quantity_selected);
+			LCDprint(select_item);
 			pthread_mutex_unlock(&bus_lock);
-				
-			usleep(1000);
-			pthread_mutex_lock(&bus_lock);
-			CM3_outport(LEDPort,Bin2LED[1]);
-			pthread_mutex_unlock(&bus_lock);
-			usleep(2000000);
 
-			while (i != '*')
+			pthread_mutex_lock(&bus_lock);
+			i = ScanKey();
+			pthread_mutex_unlock(&bus_lock);
+			usleep(100000);
+
+			if (i == '1' )
 			{
+				printf("Pressed Key: %c\n",i);
+				initlcd();
+				int mj = 0;
+					
 				pthread_mutex_lock(&bus_lock);
-				i = ScanKey();
+				LCDprint(strcat(item_quantity_remain, item1_quantity));
+				lcd_writecmd(0xC0);
+				LCDprint(item_quantity_selected);
 				pthread_mutex_unlock(&bus_lock);
-				usleep(100000);
+					
+				usleep(1000);
+				pthread_mutex_lock(&bus_lock);
+				CM3_outport(LEDPort,Bin2LED[1]);
+				pthread_mutex_unlock(&bus_lock);
+				usleep(2000000);
 
-				if (i == '1' || i == '2' || i == '3' || i == '4' || i == '5' || i == '6' || i == '7' || i == '8' || i == '9' || i == '0')
+				while (true)
 				{
 					pthread_mutex_lock(&bus_lock);
-					LCDprint(i);
+					LCDprint(item_quantity_selected);
 					pthread_mutex_unlock(&bus_lock);
 					usleep(100000);
-					mj = mj*10 + (i - '0');
+
+					pthread_mutex_lock(&bus_lock);
+					i = ScanKey();
+					pthread_mutex_unlock(&bus_lock);
+					usleep(100000);
+
+					if (i == '1' || i == '2' || i == '3' || i == '4' || i == '5' || i == '6' || i == '7' || i == '8' || i == '9' || i == '0')
+					{
+						pthread_mutex_lock(&bus_lock);
+						LCDprint(i);
+						pthread_mutex_unlock(&bus_lock);
+						usleep(100000);
+						mj = mj*10 + (i - '0');
+						item_quantity_selected = mj;
+
+						if (item_quantity_selected <= item1_quantity)
+						{
+							break;
+						}
+						else
+						{
+							pthread_mutex_lock(&bus_lock);
+							lcd_writecmd(0x01);
+							usleep(1000);
+							lcd_writecmd(0x80);
+							usleep(1000);	
+							LCDprint(invalid_quantity);
+							pthread_mutex_unlock(&bus_lock);
+							usleep(1000000);
+							
+						}
+						
+					}
+					else if (i == 'A') // Cancel
+					{
+						pthread_mutex_lock(&bus_lock);
+						lcd_writecmd(0x01);
+						usleep(1000);
+						lcd_writecmd(0x80);
+						usleep(1000);
+						LCDprint(cancel);
+						usleep(1000000);
+						pthread_mutex_unlock(&bus_lock);
+						goto start;
+					}
+
 				}
+
+				total_cost = item_quantity_selected * item1_price;
+
+				pthread_mutex_lock(&bus_lock);
+				LCDprint(strcat(total_cost, total_cost));
+				pthread_mutex_unlock(&bus_lock);
+				usleep(2000000)
+
+				enter_acc_num:
+					pthread_mutex_lock(&bus_lock);
+					lcd_writecmd(0x01);
+					usleep(1000);
+					lcd_writecmd(0x80);
+					usleep(1000);
+					LCDprint(bank_number);
+					usleep(10000);
+					lcd_writecmd(0xC0);
+					usleep(1000);
+					pthread_mutex_unlock(&bus_lock);
+
+				
+					while(true)
+					{
+						pthread_mutex_lock(&bus_lock);
+						i = ScanKey();
+						pthread_mutex_unlock(&bus_lock);
+						usleep(100000);
+
+						if (i == 'A')
+						{
+							pthread_mutex_lock(&bus_lock);
+							lcd_writecmd(0x01);
+							usleep(1000);
+							lcd_writecmd(0x80);
+							usleep(1000);
+							LCDprint(cancel);
+							usleep(1000000);
+							pthread_mutex_unlock(&bus_lock);
+							goto start;
+						}
+						else if ( i == 'B')
+						{
+							// Enter pressed, verify account number
+							if (input_acc_num == account_number)
+							{
+								goto enter_pin;
+							}
+							else
+							{
+								pthread_mutex_lock(&bus_lock);
+								lcd_writecmd(0x01);
+								usleep(1000);
+								lcd_writecmd(0x80);
+								usleep(1000);
+								LCDprint(invalid_account_no_1);
+								usleep(10000);
+								lcd_writecmd(0xC0);
+								usleep(1000);
+								LCDprint(invalid_account_no_2);
+								usleep(3000000);
+								lcd_writecmd(0x01);
+								usleep(1000);
+								lcd_writecmd(0x80);
+								usleep(1000);
+								LCDprint(try_again);
+								usleep(10000);
+								lcd_writecmd(0xC0);
+								usleep(1000);
+								LCDprint(quit);
+								pthread_mutex_unlock(&bus_lock);
+
+								while (true)
+								{
+									pthread_mutex_lock(&bus_lock);
+									i = ScanKey();
+									pthread_mutex_unlock(&bus_lock);
+									usleep(100000);
+
+									if (i == '1')
+									{
+										goto enter_acc_num;
+									}
+									else if (i == '2')
+									{
+										pthread_mutex_lock(&bus_lock);
+										lcd_writecmd(0x01);
+										usleep(1000);
+										lcd_writecmd(0x80);
+										usleep(1000);
+										LCDprint(cancel);
+										usleep(1000000);
+										pthread_mutex_unlock(&bus_lock);
+										goto start;
+									}
+									else
+									{
+										continue;
+									}
+
+								}
+
+							}
+
+						}
+						else if (i == '1' || i == '2' || i == '3' || i == '4' || i == '5' || i == '6' || i == '7' || i == '8' || i == '9' || i == '0')
+						{
+							pthread_mutex_lock(&bus_lock);
+							LCDprint(i);
+							pthread_mutex_unlock(&bus_lock);
+							usleep(100000);
+							input_acc_num = strcat(input_acc_num, i);
+						}
+					}
+
+				enter_pin:
+					pthread_mutex_lock(&bus_lock);
+					lcd_writecmd(0x01);
+					usleep(1000);
+					lcd_writecmd(0x80);
+					usleep(1000);
+					LCDprint(pin_number);
+					usleep(10000);
+					lcd_writecmd(0xC0);
+					usleep(1000);
+					pthread_mutex_unlock(&bus_lock);
+
+					while(true)
+					{
+						pthread_mutex_lock(&bus_lock);
+						i = ScanKey();
+						pthread_mutex_unlock(&bus_lock);
+						usleep(100000);
+
+						if (i == 'A')
+						{
+							pthread_mutex_lock(&bus_lock);
+							lcd_writecmd(0x01);
+							usleep(1000);
+							lcd_writecmd(0x80);
+							usleep(1000);
+							LCDprint(cancel);
+							usleep(1000000);
+							pthread_mutex_unlock(&bus_lock);
+							goto start;
+						}
+						else if ( i == 'B')
+						{
+							// Enter pressed, verify account number
+							if (input_pin_num == pin_number)
+							{
+								goto process_payment;
+							}
+							else
+							{
+								pthread_mutex_lock(&bus_lock);
+								lcd_writecmd(0x01);
+								usleep(1000);
+								lcd_writecmd(0x80);
+								usleep(1000);
+								LCDprint(invalid_pin_no);
+								usleep(3000000);
+								lcd_writecmd(0x01);
+								usleep(1000);
+								lcd_writecmd(0x80);
+								usleep(1000);
+								LCDprint(try_again);
+								usleep(10000);
+								lcd_writecmd(0xC0);
+								usleep(1000);
+								LCDprint(quit);
+								pthread_mutex_unlock(&bus_lock);
+
+								while (true)
+								{
+									pthread_mutex_lock(&bus_lock);
+									i = ScanKey();
+									pthread_mutex_unlock(&bus_lock);
+									usleep(100000);
+
+									if (i == '1')
+									{
+										goto enter_pin;
+									}
+									else if (i == '2')
+									{
+										pthread_mutex_lock(&bus_lock);
+										lcd_writecmd(0x01);
+										usleep(1000);
+										lcd_writecmd(0x80);
+										usleep(1000);
+										LCDprint(cancel);
+										usleep(1000000);
+										pthread_mutex_unlock(&bus_lock);
+										goto start;
+									}
+									else
+									{
+										continue;
+									}
+
+								}
+							}
+
+						}
+						else if (i == '1' || i == '2' || i == '3' || i == '4' || i == '5' || i == '6' || i == '7' || i == '8' || i == '9' || i == '0')
+						{
+							pthread_mutex_lock(&bus_lock);
+							LCDprint('*');
+							pthread_mutex_unlock(&bus_lock);
+							usleep(100000);
+							input_pin_num = strcat(input_pin_num, i);
+						}
+					}
+					
+				process_payment:
+					if (total_cost > account_balance)
+					{
+						// Payment failed
+						pthread_mutex_lock(&bus_lock);
+						lcd_writecmd(0x01);
+						usleep(1000);
+						lcd_writecmd(0x80);
+						usleep(1000);
+						LCDprint(insufficient_funds);
+						usleep(2000000);
+						lcd_writecmd(0x01);
+						usleep(1000);
+						pthread_mutex_unlock(&bus_lock);
+
+						goto start; // Secound account not implemented yet
+						
+
+					}
+					else
+					{
+						// Payment Successful
+						account_balance = account_balance - total_cost;
+						pthread_mutex_lock(&bus_lock);
+						lcd_writecmd(0x01);
+						usleep(1000);
+						lcd_writecmd(0x80);
+						usleep(1000);
+						LCDprint(amount_charged_1);
+						usleep(10000);
+						lcd_writecmd(0xC0);
+						usleep(1000);
+						LCDprint(strcat(amount_charged_2, total_cost));
+						usleep(2000000);
+
+						lcd_writecmd(0x01);
+						usleep(1000);
+						lcd_writecmd(0x80);
+						usleep(1000);
+						LCDprint(balance_1);
+						usleep(10000);
+						lcd_writecmd(0xC0);
+						usleep(1000);
+						LCDprint(strcat(balance_2, account_balance));
+						usleep(3000000);
+
+						lcd_writecmd(0x01);
+						usleep(1000);
+						lcd_writecmd(0x80);
+						usleep(1000);
+						LCDprint(dispensing);
+						usleep(10000);
+						pthread_mutex_unlock(&bus_lock);
+
+						// turn motor (dispense item)
+
+					}
+
+
+
+
+
+
+				
+
+				
+			
 			}
-		
+
+
+
 		}
-
-
-
-	}
 }
 
 
